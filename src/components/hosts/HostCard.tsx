@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { CircleCheck, CircleX, CircleMinus, FilePlus, Settings2, PlusCircle, RefreshCw, ChevronDown, FileCheck, FileText, AlertCircle, Trash2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card";
@@ -45,6 +46,7 @@ interface HostCardProps {
   onOpenConfigDialog: (hostId: string) => void;
   onCreateConfig: (hostId: string, profileId?: string) => void;
   onFixConfig: (hostId: string) => void;
+  onAddServer: () => void;
 }
 
 export function HostCard({ 
@@ -54,7 +56,8 @@ export function HostCard({
   onProfileChange, 
   onOpenConfigDialog,
   onCreateConfig,
-  onFixConfig
+  onFixConfig,
+  onAddServer
 }: HostCardProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [instanceStatuses, setInstanceStatuses] = useState<InstanceStatus[]>([]);

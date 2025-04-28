@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -27,7 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Scan, PlusCircle, Check, AlertCircle } from "lucide-react";
+import { RefreshCw, Scan, PlusCircle, Check, AlertCircle, X } from "lucide-react";
 import { type Host, type ConnectionStatus } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 

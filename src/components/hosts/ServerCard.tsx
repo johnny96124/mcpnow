@@ -19,7 +19,7 @@ import {
   SheetTitle
 } from "@/components/ui/sheet";
 import { type ServerInstance, type ConnectionStatus } from "@/data/mockData";
-import { AlertCircle, Info, MoreHorizontal, Play, Server, Stop, Terminal, FileText } from "lucide-react";
+import { AlertCircle, Info, MoreHorizontal, Play, Server, FileText, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ServerCardProps {
@@ -48,7 +48,7 @@ export function ServerCard({
     
     if (!isRunning) {
       // Start server
-      setStatus("connecting");
+      setStatus("connected" as ConnectionStatus);
       
       // Simulate server startup
       setTimeout(() => {
@@ -56,14 +56,14 @@ export function ServerCard({
         const success = Math.random() > 0.2;
         
         if (success) {
-          setStatus("connected");
+          setStatus("connected" as ConnectionStatus);
           setIsRunning(true);
           toast({
             title: "Server started",
             description: `${server.name} is now running.`
           });
         } else {
-          setStatus("error");
+          setStatus("disconnected" as ConnectionStatus);
           setIsRunning(false);
           toast({
             title: "Failed to start server",
@@ -74,7 +74,7 @@ export function ServerCard({
       }, 1500);
     } else {
       // Stop server
-      setStatus("disconnected");
+      setStatus("disconnected" as ConnectionStatus);
       setIsRunning(false);
       toast({
         title: "Server stopped",
@@ -87,10 +87,8 @@ export function ServerCard({
     switch (status) {
       case "connected":
         return "bg-green-500";
-      case "connecting":
-        return "bg-yellow-500 animate-pulse";
-      case "error":
-        return "bg-red-500";
+      case "disconnected":
+        return "bg-gray-400";
       default:
         return "bg-gray-400";
     }
@@ -100,10 +98,8 @@ export function ServerCard({
     switch (status) {
       case "connected":
         return "Connected";
-      case "connecting":
-        return "Connecting";
-      case "error":
-        return "Error";
+      case "disconnected":
+        return "Disconnected";
       default:
         return "Disconnected";
     }
@@ -122,21 +118,17 @@ export function ServerCard({
 
   return (
     <>
-      <Card className={`overflow-hidden ${status === "error" ? "border-red-200" : ""}`}>
+      <Card className={`overflow-hidden ${status === "disconnected" ? "border-red-200" : ""}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                {server.icon ? (
-                  <span className="text-lg">{server.icon}</span>
-                ) : (
-                  <Server className="h-5 w-5 text-primary" />
-                )}
+                <Server className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium">{server.name}</h3>
-                  {status === "error" && (
+                  {status === "disconnected" && (
                     <Badge variant="destructive" className="flex gap-1 items-center cursor-pointer" onClick={() => setIsDebugOpen(true)}>
                       <AlertCircle className="h-3 w-3" />
                       Error
@@ -154,7 +146,7 @@ export function ServerCard({
               <Switch 
                 checked={isRunning} 
                 onCheckedChange={handleToggleServer} 
-                disabled={!hostConnected || status === "connecting"} 
+                disabled={!hostConnected || status === "disconnected"} 
               />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -165,7 +157,7 @@ export function ServerCard({
                 <DropdownMenuContent align="end">
                   <DropdownMenuGroup>
                     <DropdownMenuItem onClick={() => setIsDebugOpen(true)}>
-                      <Terminal className="h-4 w-4 mr-2" />
+                      <AlertCircle className="h-4 w-4 mr-2" />
                       View Debug Tools
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setIsLogsOpen(true)}>
@@ -189,7 +181,7 @@ export function ServerCard({
             </div>
           </div>
 
-          {status === "error" && (
+          {status === "disconnected" && (
             <div className="mt-3 text-sm p-2 rounded bg-red-50 text-red-700 border border-red-100">
               <p className="font-medium">Connection failed</p>
               <p className="mt-1">Check server configuration and host connectivity.</p>
@@ -217,13 +209,8 @@ export function ServerCard({
                     <span>{getStatusText()}</span>
                   </div>
                   
-                  <div className="text-muted-foreground">Type</div>
-                  <div className="col-span-2">{server.type || "HTTP"}</div>
-                  
-                  <div className="text-muted-foreground">URL</div>
-                  <div className="col-span-2 font-mono text-xs">
-                    {server.connectionDetails || "http://localhost:8008/mcp"}
-                  </div>
+                  <div className="text-muted-foreground">Connection</div>
+                  <div className="col-span-2">{server.connectionDetails || "http://localhost:8008/mcp"}</div>
                 </div>
               </div>
             </div>
@@ -235,7 +222,7 @@ export function ServerCard({
                   variant={isRunning ? "outline" : "default"} 
                   size="sm" 
                   className="flex-1"
-                  disabled={!hostConnected || status === "connecting"}
+                  disabled={!hostConnected || status === "connected"}
                   onClick={() => {
                     if (!isRunning) {
                       handleToggleServer();
@@ -249,14 +236,14 @@ export function ServerCard({
                   variant={!isRunning ? "outline" : "default"} 
                   size="sm" 
                   className="flex-1"
-                  disabled={!hostConnected || !isRunning || status === "connecting"}
+                  disabled={!hostConnected || !isRunning || status === "disconnected"}
                   onClick={() => {
                     if (isRunning) {
                       handleToggleServer();
                     }
                   }}
                 >
-                  <Stop className="h-4 w-4 mr-2" />
+                  <X className="h-4 w-4 mr-2" />
                   Stop
                 </Button>
               </div>
@@ -265,7 +252,7 @@ export function ServerCard({
             <div>
               <h3 className="text-sm font-medium mb-2">Server Logs</h3>
               <div className="h-[300px] overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs">
-                {status === "error" ? (
+                {status === "disconnected" ? (
                   <div className="text-red-500">
                     <p>[ERROR] Failed to connect to server at {server.connectionDetails || "http://localhost:8008/mcp"}</p>
                     <p>[ERROR] Connection timeout after 5000ms</p>

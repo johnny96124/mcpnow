@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { TabsList, TabsTrigger, Tabs, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -8,13 +7,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { ServerDefinition, serverDefinitions } from "@/data/mockData";
+import { ServerDefinition, ServerInstance, serverDefinitions } from "@/data/mockData";
 import { Separator } from "@/components/ui/separator";
 
 interface AddServerToHostDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddServers: (servers: ServerDefinition[]) => void;
+  onAddServers: (servers: ServerInstance[]) => void;
 }
 
 export function AddServerToHostDialog({ open, onOpenChange, onAddServers }: AddServerToHostDialogProps) {
@@ -33,7 +32,16 @@ export function AddServerToHostDialog({ open, onOpenChange, onAddServers }: AddS
   };
 
   const handleAddServers = () => {
-    onAddServers(selectedServers);
+    const serverInstances: ServerInstance[] = selectedServers.map(def => ({
+      id: `instance-${Date.now()}-${def.id}`,
+      name: def.name,
+      definitionId: def.id,
+      status: 'running',
+      connectionDetails: def.url || "http://localhost:8008/mcp",
+      enabled: true,
+    }));
+    
+    onAddServers(serverInstances);
     setSelectedServers([]);
     onOpenChange(false);
   };

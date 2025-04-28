@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Search, RefreshCw, ServerCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -120,7 +119,10 @@ const Hosts = () => {
           id: newProfileId,
           name: `${newHost.name} Profile`,
           description: `Default profile for ${newHost.name}`,
-          endpoint: "http://localhost:8008"
+          endpoint: "http://localhost:8008",
+          endpointType: "HTTP_SSE",
+          enabled: true,
+          instances: []
         };
         setLocalProfiles([newProfile]);
         setActiveProfileId(newProfileId);
@@ -171,7 +173,10 @@ const Hosts = () => {
       id: newProfileId,
       name,
       description: `Profile for ${name}`,
-      endpoint: "http://localhost:8008"
+      endpoint: "http://localhost:8008",
+      endpointType: "HTTP_SSE",
+      enabled: true,
+      instances: []
     };
     
     setLocalProfiles(prev => [...prev, newProfile]);
@@ -224,6 +229,11 @@ const Hosts = () => {
   const selectedHostConnectionStatus = selectedHostForServer?.connectionStatus || "unknown";
   const isConnected = selectedHostConnectionStatus === "connected";
 
+  const handleAddServerToHost = (host: Host) => {
+    setSelectedHostForServer(host);
+    setAddServerDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="flex items-center justify-between">
@@ -253,10 +263,7 @@ const Hosts = () => {
               onCreateConfig={handleCreateConfigDialog}
               onFixConfig={handleUpdateConfigDialog}
               showHostRefreshHint={showHostRefreshHint}
-              onAddServer={() => {
-                setSelectedHostForServer(host);
-                setAddServerDialogOpen(true);
-              }}
+              onAddServer={() => handleAddServerToHost(host)}
             />
           ))}
         </div>
