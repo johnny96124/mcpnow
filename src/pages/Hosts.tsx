@@ -1,8 +1,8 @@
 
 import { useState, useEffect } from "react";
-import { PlusCircle, Search, RefreshCw, FileText, Info, ScanLine, ServerCog } from "lucide-react";
+import { Search, RefreshCw, ServerCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { hosts } from "@/data/mockData";
+import { hosts, profiles, serverDefinitions, type Host, type Profile, type ServerInstance } from "@/data/mockData";
 import { ConfigFileDialog } from "@/components/hosts/ConfigFileDialog";
 import { useToast } from "@/hooks/use-toast";
 import { HostCard } from "@/components/hosts/HostCard";
@@ -10,12 +10,12 @@ import { HostSearch } from "@/components/hosts/HostSearch";
 import { NoSearchResults } from "@/components/hosts/NoSearchResults";
 import { useConfigDialog } from "@/hooks/useConfigDialog";
 import { useHostProfiles } from "@/hooks/useHostProfiles";
-import { AddHostDialog } from "@/components/hosts/AddHostDialog";
-import { ConnectionStatus, Host, profiles, ServerDefinition } from "@/data/mockData";
-import { Skeleton } from "@/components/ui/skeleton";
 import { markHostsOnboardingAsSeen } from "@/utils/localStorage";
 import { Card, CardContent } from "@/components/ui/card";
 import { AddServerToHostDialog } from "@/components/hosts/AddServerToHostDialog";
+import { AddHostScanDialog } from "@/components/hosts/AddHostScanDialog";
+import { ProfileSelector } from "@/components/hosts/ProfileSelector";
+import { ServerCard } from "@/components/hosts/ServerCard";
 
 const mockJsonConfig = {
   "mcpServers": {
@@ -26,6 +26,10 @@ const mockJsonConfig = {
   }
 };
 
+interface ActiveProfile extends Profile {
+  servers: ServerInstance[];
+}
+
 const Hosts = () => {
   useEffect(() => {
     markHostsOnboardingAsSeen();
@@ -34,9 +38,12 @@ const Hosts = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [hostsList, setHostsList] = useState<Host[]>(hosts);
   const [addHostDialogOpen, setAddHostDialogOpen] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [showHostRefreshHint, setShowHostRefreshHint] = useState(false);
   const [addServerDialogOpen, setAddServerDialogOpen] = useState(false);
+  const [selectedHostForServer, setSelectedHostForServer] = useState<Host | null>(null);
+  const [showHostRefreshHint, setShowHostRefreshHint] = useState(false);
+  const [localProfiles, setLocalProfiles] = useState<Profile[]>(profiles);
+  const [activeProfileId, setActiveProfileId] = useState<string>(profiles[0]?.id || "");
+  const [profileServers, setProfileServers] = useState<Record<string, ServerInstance[]>>({});
 
   const {
     hostProfiles,
@@ -50,16 +57,14 @@ const Hosts = () => {
     resetConfigDialog
   } = useConfigDialog(mockJsonConfig);
 
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
 
   const filteredHosts = hostsList.filter(host => host.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const clearSearch = () => setSearchQuery("");
 
   const getProfileEndpoint = (profileId: string) => {
-    const profile = profiles.find(p => p.id === profileId);
+    const profile = localProfiles.find(p => p.id === profileId);
     return profile ? profile.endpoint : null;
   };
 
@@ -102,65 +107,31 @@ const Hosts = () => {
     }
   };
 
-  const handleScanForHosts = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      const foundHost = Math.random() > 0.5;
-      if (foundHost) {
-        const newId = `host-${Date.now()}`;
-        const newHost: Host = {
-          id: newId,
-          name: "Local Host",
-          icon: "💻",
-          connectionStatus: "disconnected",
-          configStatus: "unknown"
+  const handleAddHost = (newHosts: Host[]) => {
+    // Create a new profile for each host if there are none
+    newHosts.forEach(newHost => {
+      // Add host to the list
+      setHostsList(prev => [...prev, newHost]);
+      
+      // Create a default profile if none exists
+      if (localProfiles.length === 0) {
+        const newProfileId = `profile-${Date.now()}`;
+        const newProfile: Profile = {
+          id: newProfileId,
+          name: `${newHost.name} Profile`,
+          description: `Default profile for ${newHost.name}`,
+          endpoint: "http://localhost:8008"
         };
-        setHostsList(prevHosts => [...prevHosts, newHost]);
-        toast({
-          title: "Host discovered",
-          description: "A new local host has been found and added to your hosts list."
-        });
-        setTimeout(() => {
-          toast({
-            title: "Configure new host",
-            description: "Configure this host to connect it with your profiles."
-          });
-        }, 500);
-      } else {
-        toast({
-          title: "No hosts found",
-          description: "No new hosts were discovered on your network.",
-          variant: "destructive"
-        });
+        setLocalProfiles([newProfile]);
+        setActiveProfileId(newProfileId);
       }
-      setIsScanning(false);
-    }, 2500);
-  };
-
-  const handleAddHost = (newHost: {
-    name: string;
-    configPath?: string;
-    icon?: string;
-    configStatus: "configured" | "misconfigured" | "unknown";
-    connectionStatus: ConnectionStatus;
-  }) => {
-    const id = `host-${Date.now()}`;
-    const host: Host = {
-      id,
-      ...newHost,
-      connectionStatus: "disconnected"
-    };
-    setHostsList([...hostsList, host]);
-    toast({
-      title: "Host Added",
-      description: `${newHost.name} has been added successfully`
-    });
-    setTimeout(() => {
+      
+      // Show success toast
       toast({
-        title: "Configure new host",
-        description: "Configure this host to connect it with your profiles."
+        title: "Host Added",
+        description: `${newHost.name} has been added and configured successfully`
       });
-    }, 500);
+    });
   };
 
   const handleUpdateConfig = (config: string, configPath: string) => {
@@ -179,12 +150,79 @@ const Hosts = () => {
     resetConfigDialog();
   };
 
-  const handleAddServers = (selectedServers: ServerDefinition[]) => {
+  const handleAddServers = (servers: ServerInstance[]) => {
+    if (!selectedHostForServer) return;
+    
+    // Add servers to active profile
+    setProfileServers(prev => ({
+      ...prev,
+      [activeProfileId]: [...(prev[activeProfileId] || []), ...servers]
+    }));
+    
     toast({
       title: "Servers added",
-      description: `Successfully added ${selectedServers.length} servers to the host.`
+      description: `Successfully added ${servers.length} servers to the profile.`
     });
   };
+
+  const handleCreateProfile = (name: string) => {
+    const newProfileId = `profile-${Date.now()}`;
+    const newProfile: Profile = {
+      id: newProfileId,
+      name,
+      description: `Profile for ${name}`,
+      endpoint: "http://localhost:8008"
+    };
+    
+    setLocalProfiles(prev => [...prev, newProfile]);
+    setActiveProfileId(newProfileId);
+  };
+
+  const handleDeleteProfile = (profileId: string) => {
+    // Don't delete if it's the last profile
+    if (localProfiles.length <= 1) {
+      toast({
+        title: "Cannot delete profile",
+        description: "You need at least one profile.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    // Delete profile and switch to another one
+    setLocalProfiles(prev => prev.filter(p => p.id !== profileId));
+    
+    if (activeProfileId === profileId) {
+      const remainingProfiles = localProfiles.filter(p => p.id !== profileId);
+      setActiveProfileId(remainingProfiles[0].id);
+    }
+    
+    // Remove servers associated with this profile
+    setProfileServers(prev => {
+      const { [profileId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const handleRemoveServer = (serverId: string) => {
+    setProfileServers(prev => ({
+      ...prev,
+      [activeProfileId]: (prev[activeProfileId] || []).filter(s => s.id !== serverId)
+    }));
+    
+    toast({
+      title: "Server removed",
+      description: "The server has been removed from this profile."
+    });
+  };
+  
+  const activeProfile: ActiveProfile | undefined = localProfiles.find(p => p.id === activeProfileId) ? {
+    ...(localProfiles.find(p => p.id === activeProfileId) as Profile),
+    servers: profileServers[activeProfileId] || []
+  } : undefined;
+  
+  const selectedHostConnectionStatus = selectedHostForServer?.connectionStatus || "unknown";
+  const isConnected = selectedHostConnectionStatus === "connected";
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -192,24 +230,13 @@ const Hosts = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Hosts</h1>
           <p className="text-muted-foreground">
-            Manage host connections and profile associations
+            Manage host connections and server configurations
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleScanForHosts} disabled={isScanning}>
-            {isScanning ? <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Scanning...
-              </> : <>
-                <Search className="h-4 w-4 mr-2" />
-                Scan for Hosts
-              </>}
-          </Button>
-          <Button onClick={() => setAddHostDialogOpen(true)}>
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Add Host Manually
-          </Button>
-        </div>
+        <Button onClick={() => setAddHostDialogOpen(true)}>
+          <ServerCog className="h-4 w-4 mr-2" />
+          Add Host
+        </Button>
       </div>
       
       <HostSearch searchQuery={searchQuery} onSearchChange={setSearchQuery} />
@@ -226,77 +253,144 @@ const Hosts = () => {
               onCreateConfig={handleCreateConfigDialog}
               onFixConfig={handleUpdateConfigDialog}
               showHostRefreshHint={showHostRefreshHint}
+              onAddServer={() => {
+                setSelectedHostForServer(host);
+                setAddServerDialogOpen(true);
+              }}
             />
           ))}
-          
-          <Card className="border-2 border-dashed bg-muted/50 hover:bg-muted/80 transition-colors">
-            <CardContent className="p-6 h-full flex flex-col items-center justify-center text-center space-y-5">
+        </div>
+      ) : searchQuery ? (
+        <NoSearchResults query={searchQuery} onClear={clearSearch} />
+      ) : (
+        <Card className="border-2 border-dashed bg-muted/50 hover:bg-muted/80 transition-colors">
+          <CardContent className="p-6 h-[400px] flex flex-col items-center justify-center text-center space-y-5">
+            <div className="rounded-full bg-primary/10 p-4">
+              <ServerCog className="h-8 w-8 text-primary" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-semibold">No Hosts Yet</h3>
+              <p className="text-muted-foreground">
+                Add your first host to start connecting with MCP servers
+              </p>
+            </div>
+            <Button onClick={() => setAddHostDialogOpen(true)} className="mt-4">
+              <ServerCog className="h-4 w-4 mr-2" />
+              Add Your First Host
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      
+      <div className="mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold tracking-tight">Connected Servers</h2>
+          {localProfiles.length > 0 && (
+            <ProfileSelector 
+              profiles={localProfiles}
+              currentProfileId={activeProfileId}
+              onProfileChange={setActiveProfileId}
+              onCreateProfile={handleCreateProfile}
+              onDeleteProfile={handleDeleteProfile}
+            />
+          )}
+        </div>
+        
+        {activeProfile ? (
+          <div className="space-y-4">
+            {activeProfile.servers.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {activeProfile.servers.map(server => (
+                  <ServerCard
+                    key={server.id}
+                    server={server}
+                    hostConnected={isConnected}
+                    onRemoveServer={handleRemoveServer}
+                    onViewDetails={() => {
+                      toast({
+                        title: "Server details",
+                        description: "This would open the server details view."
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="border-2 border-dashed bg-muted/50">
+                <CardContent className="p-6 h-[300px] flex flex-col items-center justify-center text-center space-y-5">
+                  <div className="rounded-full bg-primary/10 p-4">
+                    <ServerCog className="h-8 w-8 text-primary" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-semibold">No Servers Added</h3>
+                    <p className="text-muted-foreground">
+                      Add servers to this profile from your connected hosts
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      if (filteredHosts.length > 0) {
+                        setSelectedHostForServer(filteredHosts[0]);
+                        setAddServerDialogOpen(true);
+                      } else {
+                        toast({
+                          title: "No hosts available",
+                          description: "You need to add a host before adding servers.",
+                          variant: "destructive"
+                        });
+                      }
+                    }} 
+                    disabled={filteredHosts.length === 0}
+                    className="mt-4"
+                  >
+                    <ServerCog className="h-4 w-4 mr-2" />
+                    Add Server
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : (
+          <Card className="border-2 border-dashed bg-muted/50">
+            <CardContent className="p-6 h-[300px] flex flex-col items-center justify-center text-center space-y-5">
               <div className="rounded-full bg-primary/10 p-4">
                 <ServerCog className="h-8 w-8 text-primary" />
               </div>
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold">Add New Host</h3>
+                <h3 className="text-xl font-semibold">No Profiles Created</h3>
                 <p className="text-muted-foreground">
-                  Scan your network for hosts or manually add host connections
+                  Add a host first to create your default profile
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row gap-3 mt-2">
-                <Button onClick={handleScanForHosts} disabled={isScanning} variant="outline" className="gap-2">
-                  {isScanning ? <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Scanning...
-                    </> : <>
-                      <ScanLine className="h-4 w-4" />
-                      Scan for Hosts
-                    </>}
-                </Button>
-                <Button onClick={() => setAddHostDialogOpen(true)} className="gap-2">
-                  <PlusCircle className="h-4 w-4" />
-                  Add Host Manually
-                </Button>
-              </div>
+              <Button onClick={() => setAddHostDialogOpen(true)} className="mt-4">
+                <ServerCog className="h-4 w-4 mr-2" />
+                Add Your First Host
+              </Button>
             </CardContent>
           </Card>
-          
-          {isScanning && <div className="border rounded-lg overflow-hidden shadow-sm h-[400px]">
-              <div className="bg-muted/50 p-6 pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Skeleton className="h-6 w-6 rounded-full" />
-                    <Skeleton className="h-6 w-32" />
-                  </div>
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              </div>
-              <div className="p-6 space-y-4">
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-20 w-full" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-4 w-20" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Skeleton className="h-9 w-1/2" />
-                    <Skeleton className="h-9 w-1/2" />
-                  </div>
-                </div>
-              </div>
-            </div>}
-        </div>
-      ) : (
-        searchQuery && <NoSearchResults query={searchQuery} onClear={clearSearch} />
-      )}
+        )}
+      </div>
       
-      <ConfigFileDialog open={configDialog.isOpen} onOpenChange={setDialogOpen} configPath={configDialog.configPath} initialConfig={configDialog.configContent} onSave={handleUpdateConfig} profileEndpoint={configDialog.profileEndpoint} needsUpdate={configDialog.needsUpdate} allowPathEdit={configDialog.allowPathEdit} isViewOnly={configDialog.isViewOnly} isFixMode={configDialog.isFixMode} isUpdateMode={configDialog.isUpdateMode} isCreateMode={configDialog.isCreateMode} />
+      <ConfigFileDialog 
+        open={configDialog.isOpen} 
+        onOpenChange={setDialogOpen} 
+        configPath={configDialog.configPath} 
+        initialConfig={configDialog.configContent} 
+        onSave={handleUpdateConfig} 
+        profileEndpoint={configDialog.profileEndpoint} 
+        needsUpdate={configDialog.needsUpdate} 
+        allowPathEdit={configDialog.allowPathEdit} 
+        isViewOnly={configDialog.isViewOnly} 
+        isFixMode={configDialog.isFixMode} 
+        isUpdateMode={configDialog.isUpdateMode} 
+        isCreateMode={configDialog.isCreateMode} 
+      />
       
-      <AddHostDialog open={addHostDialogOpen} onOpenChange={setAddHostDialogOpen} onAddHost={handleAddHost} />
+      <AddHostScanDialog 
+        open={addHostDialogOpen} 
+        onOpenChange={setAddHostDialogOpen} 
+        onAddHosts={handleAddHost} 
+      />
       
       <AddServerToHostDialog
         open={addServerDialogOpen}
