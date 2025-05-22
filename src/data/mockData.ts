@@ -1,11 +1,13 @@
-export type EndpointType = 'HTTP_SSE' | 'STDIO';
+export type EndpointType = 'HTTP_SSE' | 'STDIO' | 'WS';
 export type Status = 'running' | 'stopped' | 'error' | 'connecting';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'misconfigured' | 'unknown';
+export type ConnectionType = 'HTTP_SSE' | 'STDIO' | 'WS';
+export type SubConnectionType = 'docker' | 'npx' | 'uvx' | 'sse' | 'streamable';
 
 export interface ServerDefinition {
   id: string;
   name: string;
-  type: EndpointType;
+  type: EndpointType | ConnectionType | ConnectionType[];  // Now can be multiple types
   description: string;
   author?: string;
   version?: string;
@@ -20,6 +22,10 @@ export interface ServerDefinition {
   environment?: Record<string, string>;
   headers?: Record<string, string>;
   tools?: Tool[];
+  hostingSupported?: boolean;  // Whether this server can be hosted
+  connectionSubtypes?: {
+    [key in ConnectionType]?: SubConnectionType[];
+  };
 }
 
 export interface Tool {
