@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,10 +9,11 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowRight, Download, Plus, X, Info } from "lucide-react";
+import { ArrowRight, Download, Plus, X, Info, Server } from "lucide-react";
 import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +21,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DialogClose } from "@/components/ui/dialog";
+import { 
+  ConnectionType, 
+  SubConnectionType 
+} from "@/data/mockData";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface AddServerDialogProps {
   open: boolean;
@@ -30,6 +37,7 @@ interface AddServerDialogProps {
 const serverFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters long" }),
   type: z.enum(["HTTP_SSE", "STDIO"]),
+  subtype: z.enum(["docker", "npx", "uvx", "sse", "streamable"]).optional(),
   url: z.string().optional(),
   commandArgs: z.string().optional(),
   description: z.string().max(100, { 
@@ -37,9 +45,28 @@ const serverFormSchema = z.object({
   }).optional(),
   environment: z.record(z.string(), z.string()).optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  isHosted: z.boolean().default(false),
 });
 
 type ServerFormValues = z.infer<typeof serverFormSchema>;
+
+// Map connection types to their subtypes
+const connectionSubtypes: Record<ConnectionType, SubConnectionType[]> = {
+  'STDIO': ['docker', 'npx', 'uvx'],
+  'HTTP_SSE': ['sse', 'streamable']
+};
+
+// Helper function to get a readable display name for subtypes
+const getSubtypeDisplayName = (subtype: SubConnectionType): string => {
+  switch (subtype) {
+    case 'docker': return 'Docker';
+    case 'npx': return 'NPX';
+    case 'uvx': return 'UVX';
+    case 'sse': return 'SSE';
+    case 'streamable': return 'Streamable';
+    default: return subtype;
+  }
+};
 
 export function AddServerDialog({
   open,
@@ -54,6 +81,7 @@ export function AddServerDialog({
   const [urlParams, setUrlParams] = useState<{ key: string; value: string }[]>([]);
   const [envKeyError, setEnvKeyError] = useState<string | null>(null);
   const [headerKeyError, setHeaderKeyError] = useState<string | null>(null);
+  const [availableSubtypes, setAvailableSubtypes] = useState<SubConnectionType[]>([]);
   const { toast } = useToast();
   
   const form = useForm<ServerFormValues>({
@@ -61,15 +89,30 @@ export function AddServerDialog({
     defaultValues: {
       name: "",
       type: "HTTP_SSE",
+      subtype: "sse",
       url: "",
       commandArgs: "",
       description: "",
       environment: {},
       headers: {},
+      isHosted: false,
     },
   });
   
-  const serverType = form.watch("type");
+  const serverType = form.watch("type") as ConnectionType;
+  const isHosted = form.watch("isHosted");
+  const subtype = form.watch("subtype");
+  
+  // Update available subtypes when connection type changes
+  useEffect(() => {
+    const subtypes = connectionSubtypes[serverType] || [];
+    setAvailableSubtypes(subtypes);
+    
+    // Set default subtype if none is selected or if current one isn't valid for this type
+    if (!subtype || !subtypes.includes(subtype as SubConnectionType)) {
+      form.setValue("subtype", subtypes[0]);
+    }
+  }, [serverType, form, subtype]);
   
   useEffect(() => {
     if (serverType === "HTTP_SSE") {
@@ -229,26 +272,92 @@ export function AddServerDialog({
                   )}
                 />
                 
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Connection Type <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select connection type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="HTTP_SSE">HTTP SSE</SelectItem>
+                            <SelectItem value="STDIO">STDIO</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="subtype"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Connection Subtype <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value ?? undefined}
+                          disabled={availableSubtypes.length === 0}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select subtype" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {availableSubtypes.map(subtype => (
+                              <SelectItem key={subtype} value={subtype}>
+                                {getSubtypeDisplayName(subtype)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
                 <FormField
                   control={form.control}
-                  name="type"
+                  name="isHosted"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Server Type <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select server type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="HTTP_SSE">HTTP SSE</SelectItem>
-                          <SelectItem value="STDIO">STDIO</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center">
+                          Enable Hosting
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-4 w-4 ml-2 text-muted-foreground" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">When hosting is enabled, the server will be run on the host instead of locally</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </FormLabel>
+                        <p className="text-sm text-muted-foreground">
+                          Use managed hosting for this server instance
+                        </p>
+                      </div>
                     </FormItem>
                   )}
                 />
@@ -283,7 +392,7 @@ export function AddServerDialog({
                   />
                 )}
                 
-                {serverType === "STDIO" && (
+                {serverType === "STDIO" && !isHosted && (
                   <FormField
                     control={form.control}
                     name="commandArgs"
@@ -313,7 +422,7 @@ export function AddServerDialog({
                   />
                 )}
                 
-                {serverType === "STDIO" && (
+                {serverType === "STDIO" && !isHosted && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <FormLabel className="flex items-center gap-1.5">

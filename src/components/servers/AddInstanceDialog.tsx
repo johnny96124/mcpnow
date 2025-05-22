@@ -3,14 +3,13 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Info, Plus, Trash2, X } from "lucide-react";
+import { Info, Plus, Trash2, X, Server } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ServerDefinition } from "@/data/mockData";
+import { ServerDefinition, ConnectionType, SubConnectionType } from "@/data/mockData";
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +20,8 @@ import { EndpointLabel } from "@/components/status/EndpointLabel";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface AddInstanceDialogProps {
   open: boolean;
@@ -32,13 +33,28 @@ interface AddInstanceDialogProps {
   instanceId?: string;
 }
 
+// Helper function to get a readable display name for subtypes
+const getSubtypeDisplayName = (subtype: SubConnectionType): string => {
+  switch (subtype) {
+    case 'docker': return 'Docker';
+    case 'npx': return 'NPX';
+    case 'uvx': return 'UVX';
+    case 'sse': return 'SSE';
+    case 'streamable': return 'Streamable';
+    default: return subtype;
+  }
+};
+
 const instanceFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  connectionType: z.enum(["HTTP_SSE", "STDIO"]),
+  connectionSubtype: z.enum(["docker", "npx", "uvx", "sse", "streamable"]).optional(),
   args: z.string().optional(),
   url: z.string().optional(),
   env: z.record(z.string(), z.string()).optional(),
   headers: z.record(z.string(), z.string()).optional(),
   instanceId: z.string().optional(),
+  isHosted: z.boolean().default(false),
 });
 
 export type InstanceFormValues = z.infer<typeof instanceFormSchema>;
@@ -60,39 +76,62 @@ export function AddInstanceDialog({
 
   // For info box visibility
   const [showInfoBox, setShowInfoBox] = useState<boolean>(true);
+  
+  // For connection type and subtype
+  const [availableConnectionTypes, setAvailableConnectionTypes] = useState<ConnectionType[]>([]);
+  const [availableSubtypes, setAvailableSubtypes] = useState<SubConnectionType[]>([]);
 
   const form = useForm<InstanceFormValues>({
     resolver: zodResolver(instanceFormSchema),
     defaultValues: {
       name: '',
+      connectionType: 'HTTP_SSE',
+      connectionSubtype: undefined,
       args: '',
       url: '',
       env: {},
       headers: {},
       instanceId: instanceId,
+      isHosted: false,
     },
   });
 
+  const connectionType = form.watch("connectionType") as ConnectionType;
+  const isHosted = form.watch("isHosted");
+  
   // Effect to reset form when dialog opens
   useEffect(() => {
     if (open && serverDefinition) {
+      // Determine available connection types
+      const types = Array.isArray(serverDefinition.type) 
+        ? serverDefinition.type 
+        : [serverDefinition.type];
+      setAvailableConnectionTypes(types);
+      
+      // Set initial connection type
+      const initialType = initialValues?.connectionType || types[0];
+      form.setValue("connectionType", initialType);
+      
       // Initialize the form with proper defaults based on server definition
       form.reset({
         name: initialValues?.name || (serverDefinition ? `${serverDefinition.name} Instance` : ""),
-        args: initialValues?.args || (serverDefinition?.type === 'STDIO' ? 
+        connectionType: initialType,
+        connectionSubtype: initialValues?.connectionSubtype,
+        args: initialValues?.args || (initialType === 'STDIO' ? 
           serverDefinition?.commandArgs || `npx -y @smithery/cli@latest install @block/${serverDefinition?.type.toLowerCase()} --client ${serverDefinition?.name?.toLowerCase()} --key ad3dda05-c241-44f6-bcb8-283ef9149d88` 
           : ""),
-        url: initialValues?.url || (serverDefinition?.type === 'HTTP_SSE' ? serverDefinition?.url || "http://localhost:3000/api" : ""),
+        url: initialValues?.url || (initialType === 'HTTP_SSE' ? serverDefinition?.url || "http://localhost:3000/api" : ""),
         env: initialValues?.env || {},
         headers: initialValues?.headers || {},
         instanceId: instanceId,
+        isHosted: initialValues?.isHosted || false,
       });
       
       // Initialize env fields based on initialValues if in edit mode
       if (editMode && initialValues?.env) {
         const envEntries = Object.entries(initialValues.env);
         setEnvFields(envEntries.map(([name, value]) => ({ name, value: value.toString() })));
-      } else if (serverDefinition?.type === 'STDIO') {
+      } else if (initialType === 'STDIO') {
         // Set default env fields for new STDIO instance based on server definition
         if (serverDefinition.environment && Object.keys(serverDefinition.environment).length > 0) {
           setEnvFields(Object.entries(serverDefinition.environment).map(([name, value]) => ({ name, value: value.toString() })));
@@ -110,7 +149,7 @@ export function AddInstanceDialog({
       if (editMode && initialValues?.headers) {
         const headerEntries = Object.entries(initialValues.headers);
         setHeaderFields(headerEntries.map(([name, value]) => ({ name, value: value.toString() })));
-      } else if (serverDefinition?.type === 'HTTP_SSE') {
+      } else if (initialType === 'HTTP_SSE') {
         // Set default header fields for new HTTP_SSE instance based on server definition
         if (serverDefinition.headers && Object.keys(serverDefinition.headers).length > 0) {
           setHeaderFields(Object.entries(serverDefinition.headers).map(([name, value]) => ({ name, value: value.toString() })));
@@ -127,10 +166,32 @@ export function AddInstanceDialog({
       setShowInfoBox(true);
     }
   }, [open, initialValues, serverDefinition, form, editMode, instanceId]);
+  
+  // Update available subtypes when connection type changes
+  useEffect(() => {
+    if (serverDefinition?.connectionSubtypes?.[connectionType]) {
+      const subtypes = serverDefinition.connectionSubtypes[connectionType] || [];
+      setAvailableSubtypes(subtypes);
+      
+      // Set default subtype if available
+      const currentSubtype = form.getValues("connectionSubtype");
+      if (!currentSubtype || !subtypes.includes(currentSubtype as SubConnectionType)) {
+        form.setValue("connectionSubtype", subtypes[0]);
+      }
+    } else {
+      // Set default subtypes based on connection type
+      const defaultSubtypes: Record<ConnectionType, SubConnectionType[]> = {
+        'STDIO': ['npx'],
+        'HTTP_SSE': ['sse']
+      };
+      setAvailableSubtypes(defaultSubtypes[connectionType] || []);
+      form.setValue("connectionSubtype", defaultSubtypes[connectionType]?.[0]);
+    }
+  }, [connectionType, serverDefinition, form]);
 
   const onSubmit = (data: InstanceFormValues) => {
     // Process environment variables for STDIO type
-    if (serverDefinition?.type === 'STDIO') {
+    if (data.connectionType === 'STDIO') {
       const envData: Record<string, string> = {};
       
       envFields.forEach(field => {
@@ -143,7 +204,7 @@ export function AddInstanceDialog({
     }
     
     // Process HTTP headers for HTTP_SSE type
-    if (serverDefinition?.type === 'HTTP_SSE') {
+    if (data.connectionType === 'HTTP_SSE') {
       const headerData: Record<string, string> = {};
       
       headerFields.forEach(field => {
@@ -184,8 +245,9 @@ export function AddInstanceDialog({
 
   if (!serverDefinition) return null;
 
-  const isStdio = serverDefinition.type === 'STDIO';
+  const isStdio = connectionType === 'STDIO';
   const isCustom = !serverDefinition.isOfficial;
+  const supportsHosting = serverDefinition.hostingSupported;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -193,10 +255,24 @@ export function AddInstanceDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>{editMode ? "Edit Instance" : serverDefinition.name}</span>
-            <EndpointLabel type={serverDefinition.type} />
+            {Array.isArray(serverDefinition.type) ? (
+              <div className="flex gap-1.5">
+                {serverDefinition.type.map(type => (
+                  <EndpointLabel key={type} type={type} />
+                ))}
+              </div>
+            ) : (
+              <EndpointLabel type={serverDefinition.type} />
+            )}
             {isCustom && (
               <Badge variant="outline" className="text-gray-600 border-gray-300 rounded-md">
                 Custom
+              </Badge>
+            )}
+            {supportsHosting && (
+              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 rounded-md flex items-center gap-1">
+                <Server className="w-3 h-3" />
+                Hostable
               </Badge>
             )}
           </DialogTitle>
@@ -261,41 +337,146 @@ export function AddInstanceDialog({
               )}
             />
             
-            {isStdio ? (
-              // STDIO specific fields
-              <>
+            <div className="grid grid-cols-2 gap-4">
+              {availableConnectionTypes.length > 1 && (
                 <FormField
                   control={form.control}
-                  name="args"
+                  name="connectionType"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center">
-                        Command Arguments
+                        Connection Type
                         <span className="text-destructive ml-1">*</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="ml-1 cursor-help">
-                                <Info className="h-4 w-4 text-muted-foreground" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Command line arguments to initialize the server</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
                       </FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="npx -y @smithery/cli@latest install @block/server-type" 
-                          className="font-mono text-sm h-20" 
-                          {...field} 
-                        />
-                      </FormControl>
+                      <Select
+                        onValueChange={(value) => form.setValue("connectionType", value as ConnectionType)}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select connection type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {availableConnectionTypes.map(type => (
+                            <SelectItem key={type} value={type}>
+                              {type === 'HTTP_SSE' ? 'HTTP SSE' : type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+              )}
+              
+              {availableSubtypes.length > 0 && (
+                <FormField
+                  control={form.control}
+                  name="connectionSubtype"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center">
+                        Connection Subtype
+                        <span className="text-destructive ml-1">*</span>
+                      </FormLabel>
+                      <Select
+                        onValueChange={(value) => form.setValue("connectionSubtype", value as SubConnectionType)}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select subtype" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {availableSubtypes.map(subtype => (
+                            <SelectItem key={subtype} value={subtype}>
+                              {getSubtypeDisplayName(subtype)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+            
+            {supportsHosting && (
+              <FormField
+                control={form.control}
+                name="isHosted"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="flex items-center">
+                        Enable Hosting
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-4 w-4 ml-2 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">When hosting is enabled, the server will be run on the host instead of locally</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Use managed hosting for this server instance
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
+            
+            {isStdio ? (
+              // STDIO specific fields
+              <>
+                {!isHosted && (
+                  <FormField
+                    control={form.control}
+                    name="args"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center">
+                          Command Arguments
+                          <span className="text-destructive ml-1">*</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="ml-1 cursor-help">
+                                  <Info className="h-4 w-4 text-muted-foreground" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Command line arguments to initialize the server</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="npx -y @smithery/cli@latest install @block/server-type" 
+                            className="font-mono text-sm h-20" 
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">

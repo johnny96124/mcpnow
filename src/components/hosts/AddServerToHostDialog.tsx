@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ServerDefinition, serverDefinitions } from "@/data/mockData";
 import { Separator } from "@/components/ui/separator";
+import { EndpointLabel } from "@/components/status/EndpointLabel";
 
 interface AddServerToHostDialogProps {
   open: boolean;
@@ -62,6 +63,25 @@ export function AddServerToHostDialog({ open, onOpenChange, onAddServers }: AddS
     }
   ];
 
+  // Helper function to render connection types for a server
+  const renderConnectionTypes = (server: ServerDefinition) => {
+    if (Array.isArray(server.type)) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {server.type.map(type => (
+            <EndpointLabel 
+              key={type} 
+              type={type} 
+              isHosted={server.hostingSupported} 
+            />
+          ))}
+        </div>
+      );
+    }
+    
+    return <EndpointLabel type={server.type} isHosted={server.hostingSupported} />;
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogContent className="sm:max-w-[600px]">
@@ -99,9 +119,12 @@ export function AddServerToHostDialog({ open, onOpenChange, onAddServers }: AddS
                       <CardContent className="p-4 flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           {server.icon && <span>{server.icon}</span>}
-                          <div>
+                          <div className="space-y-1">
                             <p className="font-medium">{server.name}</p>
-                            <p className="text-sm text-muted-foreground">{server.description}</p>
+                            <p className="text-sm text-muted-foreground line-clamp-1">{server.description}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {renderConnectionTypes(server)}
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -150,9 +173,12 @@ export function AddServerToHostDialog({ open, onOpenChange, onAddServers }: AddS
                         <CardContent className="p-4 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             {server.icon && <span>{server.icon}</span>}
-                            <div>
+                            <div className="space-y-1">
                               <p className="font-medium">{server.name}</p>
-                              <p className="text-sm text-muted-foreground">{server.description}</p>
+                              <p className="text-sm text-muted-foreground line-clamp-1">{server.description}</p>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {renderConnectionTypes(server)}
+                              </div>
                             </div>
                           </div>
                           <Button
