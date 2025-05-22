@@ -4,17 +4,20 @@ import type { ConnectionType, SubConnectionType } from "@/data/mockData";
 import { Server } from "lucide-react";
 
 interface EndpointLabelProps {
-  type: ConnectionType | 'Custom';
+  type: ConnectionType | ConnectionType[] | 'Custom';
   subType?: SubConnectionType;
   className?: string;
   isHosted?: boolean;
 }
 
 export function EndpointLabel({ type, subType, isHosted, className }: EndpointLabelProps) {
+  // If type is an array, use the first type or default to HTTP_SSE
+  const resolvedType = Array.isArray(type) ? type[0] || 'HTTP_SSE' : type;
+  
   let labelText = '';
   let typeClasses = '';
   
-  switch(type) {
+  switch(resolvedType) {
     case 'HTTP_SSE':
       labelText = subType ? `HTTP ${subType.toUpperCase()}` : 'HTTP SSE';
       typeClasses = "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-900";

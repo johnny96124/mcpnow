@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { ServerInstance, serverDefinitions } from "@/data/mockData";
 import {
@@ -129,7 +128,7 @@ export function ServerDetails({
     toast({
       title: "Changes saved",
       description: "Your changes have been saved successfully",
-      type: "success"
+      type": "success"
     });
     setUnsavedChanges(false);
   };

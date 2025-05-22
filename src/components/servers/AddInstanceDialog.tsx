@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ const getSubtypeDisplayName = (subtype: SubConnectionType): string => {
 
 const instanceFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  connectionType: z.enum(["HTTP_SSE", "STDIO"]),
+  connectionType: z.enum(["HTTP_SSE", "STDIO", "WS"]),
   connectionSubtype: z.enum(["docker", "npx", "uvx", "sse", "streamable"]).optional(),
   args: z.string().optional(),
   url: z.string().optional(),
@@ -117,7 +118,7 @@ export function AddInstanceDialog({
         connectionType: initialType,
         connectionSubtype: initialValues?.connectionSubtype,
         args: initialValues?.args || (initialType === 'STDIO' ? 
-          serverDefinition?.commandArgs || `npx -y @smithery/cli@latest install @block/${serverDefinition?.type.toLowerCase()} --client ${serverDefinition?.name?.toLowerCase()} --key ad3dda05-c241-44f6-bcb8-283ef9149d88` 
+          serverDefinition?.commandArgs || `npx -y @smithery/cli@latest install @block/${getSafeTypeName(serverDefinition?.type)} --client ${serverDefinition?.name?.toLowerCase()} --key ad3dda05-c241-44f6-bcb8-283ef9149d88` 
           : ""),
         url: initialValues?.url || (initialType === 'HTTP_SSE' ? serverDefinition?.url || "http://localhost:3000/api" : ""),
         env: initialValues?.env || {},
@@ -165,6 +166,14 @@ export function AddInstanceDialog({
       setShowInfoBox(true);
     }
   }, [open, initialValues, serverDefinition, form, editMode, instanceId]);
+  
+  // Helper function to safely get a type name for commands
+  const getSafeTypeName = (type: ConnectionType | ConnectionType[] | string | undefined): string => {
+    if (!type) return 'default';
+    if (Array.isArray(type)) return type[0]?.toLowerCase() || 'default';
+    if (typeof type === 'string') return type.toLowerCase();
+    return 'default';
+  };
   
   // Update available subtypes when connection type changes
   useEffect(() => {
