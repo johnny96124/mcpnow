@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -36,7 +35,7 @@ interface AddServerDialogProps {
 
 const serverFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters long" }),
-  type: z.enum(["HTTP_SSE", "STDIO"]),
+  type: z.enum(["HTTP_SSE", "STDIO", "WS"]),
   subtype: z.enum(["docker", "npx", "uvx", "sse", "streamable"]).optional(),
   url: z.string().optional(),
   commandArgs: z.string().optional(),
@@ -53,7 +52,8 @@ type ServerFormValues = z.infer<typeof serverFormSchema>;
 // Map connection types to their subtypes
 const connectionSubtypes: Record<ConnectionType, SubConnectionType[]> = {
   'STDIO': ['docker', 'npx', 'uvx'],
-  'HTTP_SSE': ['sse', 'streamable']
+  'HTTP_SSE': ['sse', 'streamable'],
+  'WS': ['streamable']
 };
 
 // Helper function to get a readable display name for subtypes
@@ -290,6 +290,7 @@ export function AddServerDialog({
                           <SelectContent>
                             <SelectItem value="HTTP_SSE">HTTP SSE</SelectItem>
                             <SelectItem value="STDIO">STDIO</SelectItem>
+                            <SelectItem value="WS">WS</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

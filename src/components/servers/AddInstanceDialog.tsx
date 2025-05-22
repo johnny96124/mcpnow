@@ -181,7 +181,8 @@ export function AddInstanceDialog({
       // Set default subtypes based on connection type
       const defaultSubtypes: Record<ConnectionType, SubConnectionType[]> = {
         'STDIO': ['npx'],
-        'HTTP_SSE': ['sse']
+        'HTTP_SSE': ['sse'],
+        'WS': ['streamable']
       };
       setAvailableSubtypes(defaultSubtypes[connectionType] || []);
       form.setValue("connectionSubtype", defaultSubtypes[connectionType]?.[0]);

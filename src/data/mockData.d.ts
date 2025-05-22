@@ -56,7 +56,7 @@ export interface ServerInstance {
   isHosted?: boolean;  // Whether this instance is hosted
 }
 
-export type ConnectionType = 'HTTP_SSE' | 'STDIO';
+export type ConnectionType = 'HTTP_SSE' | 'STDIO' | 'WS';
 export type SubConnectionType = 'docker' | 'npx' | 'uvx' | 'sse' | 'streamable';
 export type EndpointType = ConnectionType;
 

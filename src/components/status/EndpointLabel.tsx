@@ -4,7 +4,7 @@ import type { ConnectionType, SubConnectionType } from "@/data/mockData";
 import { Server } from "lucide-react";
 
 interface EndpointLabelProps {
-  type: ConnectionType | 'Custom' | 'WS';
+  type: ConnectionType | 'Custom';
   subType?: SubConnectionType;
   className?: string;
   isHosted?: boolean;
